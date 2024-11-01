@@ -26,6 +26,6 @@
       when: dest_dir is directory
 
     - name: Run docker compose up with build in detached mode
-      command: docker-compose up --build -d
+      command: docker compose up --build -d
       args:
         chdir: "{{ dest_dir }}"
