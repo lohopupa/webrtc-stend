@@ -8,45 +8,70 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-const localVideo = document.getElementById('localVideo');
-const remoteVideo = document.getElementById('remoteVideo');
 const startCallButton = document.getElementById('start-call');
+// const stopCallButton = document.getElementById('stop-call') as HTMLButtonElement
 let localStream;
-let peerConnection;
 let ws;
 startCallButton.onclick = () => __awaiter(void 0, void 0, void 0, function* () {
-    ws = new WebSocket('wss://stend.lhpa.ru/ws');
-    ws.onmessage = (message) => __awaiter(void 0, void 0, void 0, function* () {
-        const data = JSON.parse(message.data);
-        if (data.sdp) {
-            yield peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            if (data.sdp.type === 'offer') {
-                const answer = yield peerConnection.createAnswer();
-                yield peerConnection.setLocalDescription(answer);
-                ws.send(JSON.stringify({ sdp: answer }));
-            }
-        }
-        else if (data.candidate) {
-            yield peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-    });
-    localStream = yield navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-    localVideo.srcObject = localStream;
-    peerConnection = new RTCPeerConnection();
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    peerConnection.onicecandidate = ({ candidate }) => {
-        if (candidate) {
-            ws.send(JSON.stringify({ candidate }));
-        }
-    };
-    peerConnection.ontrack = (event) => {
-        if (remoteVideo.srcObject !== event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
-        }
-    };
-    const offer = yield peerConnection.createOffer();
-    yield peerConnection.setLocalDescription(offer);
-    ws.onopen = (w) => __awaiter(void 0, void 0, void 0, function* () {
-        ws.send(JSON.stringify({ sdp: offer }));
-    });
+    getUserAudioAndStream('wss://stend.lhpa.ru/ws');
 });
+function getUserAudioAndStream(wsUrl) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
+        const audioContext = new AudioContext();
+        ws.onmessage = (message) => __awaiter(this, void 0, void 0, function* () {
+            // console.log(message.data)
+            const samples = new Float32Array(message.data);
+            // console.log(samples)
+            const playbackNode = audioContext.createBufferSource();
+            const audioBuffer = audioContext.createBuffer(1, samples.length, audioContext.sampleRate);
+            audioBuffer.copyToChannel(samples, 0);
+            playbackNode.buffer = audioBuffer;
+            // console.log(decodedData)
+            playbackNode.connect(audioContext.destination);
+            playbackNode.start();
+        });
+        const stream = yield navigator.mediaDevices.getUserMedia({ audio: true });
+        const source = audioContext.createMediaStreamSource(stream);
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (event) => {
+            const samples = event.inputBuffer.getChannelData(0);
+            ws.send(samples.buffer);
+            // console.log(samples.buffer)
+            // const arrayBuffer = await message.data.arrayBuffer()
+            // audioContext.decodeAudioData(arrayBuffer, (decodedData) => {
+            // })
+        };
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+        // const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        // const audioContext = new AudioContext()
+        // const source = audioContext.createMediaStreamSource(stream)
+        // const processor = audioContext.createScriptProcessor(4096, 1, 1)
+        // const ws = new WebSocket(wsUrl)
+        // ws.onopen = () => {
+        //     const stopTime = Date.now() + durationMs
+        //     processor.onaudioprocess = (event) => {
+        //         if (ws.readyState === WebSocket.OPEN) {
+        //             ws.send(event.inputBuffer.getChannelData(0))
+        //         }
+        //         if (Date.now() >= stopTime) {
+        //             source.disconnect(processor)
+        //             processor.disconnect(audioContext.destination)
+        //             stream.getTracks().forEach(track => track.stop())
+        //             ws.close()
+        //         }
+        //     }
+        //     source.connect(processor)
+        //     processor.connect(audioContext.destination)
+        // }
+        // ws.onmessage = async (message) => {
+        //     const audioBuffer = await audioContext.decodeAudioData(message.data)
+        //     const playbackSource = audioContext.createBufferSource()
+        //     playbackSource.buffer = audioBuffer
+        //     playbackSource.connect(audioContext.destination)
+        //     playbackSource.start()
+        // }
+    });
+}
