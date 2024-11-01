@@ -1,7 +1,31 @@
 ---
-- name: Echo Hello World
+- name: Clone repo or pull updates and run docker compose
   hosts: all
+  vars:
+    repo_url: "https://github.com/lohopupa/webrtc-stend.git"
+    dest_dir: "~/webrtc-stend"
+
   tasks:
-    - name: Print Hello World
-      ansible.builtin.debug:
-        msg: "Hello, World!"
+    - name: Ensure destination directory exists
+      file:
+        path: "{{ dest_dir }}"
+        state: directory
+
+    - name: Clone repo if it doesn't exist
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ dest_dir }}"
+        update: no
+      when: not dest_dir is directory
+
+    - name: Pull latest changes if repo exists
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ dest_dir }}"
+        update: yes
+      when: dest_dir is directory
+
+    - name: Run docker compose up with build in detached mode
+      command: docker-compose up --build -d
+      args:
+        chdir: "{{ dest_dir }}"
