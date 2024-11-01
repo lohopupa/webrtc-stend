@@ -1,0 +1,22 @@
+services:
+  frontend:
+    build: frontend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    # depends_on:
+    #   - backend
+
+  backend:    
+    build: backend
+    volumes:
+      - ./backend/src:/app/src
+
+  proxy:
+    build: proxy
+    restart: always
+    ports:
+      - 8080:80
+    depends_on: 
+      - frontend
+      - backend
