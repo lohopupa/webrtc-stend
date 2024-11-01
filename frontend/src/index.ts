@@ -8,6 +8,7 @@ let ws: WebSocket
 
 startCallButton.onclick = async () => {
     ws = new WebSocket('wss://stend.lhpa.ru/ws')
+    ws.onerror = console.error
 
     ws.onmessage = async (message) => {
         const data = JSON.parse(message.data)
