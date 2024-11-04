@@ -1,4 +1,8 @@
 const startCallButton = document.getElementById('start-call') as HTMLButtonElement
+const nicknameInput = document.getElementById('nickname') as HTMLInputElement
+const activeUsersList = document.getElementById('active-users') as HTMLUListElement
+
+
 // const stopCallButton = document.getElementById('stop-call') as HTMLButtonElement
 
 let localStream: MediaStream
@@ -9,13 +13,36 @@ startCallButton.onclick = async () => {
 }
 
 async function getUserAudioAndStream(wsUrl: string) {
+    if(nicknameInput.value == ""){
+        alert("TELL ME YOUR NAME!!!")
+        return
+    }
 
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'
     const audioContext = new AudioContext()
 
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            type: 'nickname',
+            nickname: nicknameInput.value
+        }))
+    }
 
     ws.onmessage = async (message: MessageEvent) => {
+
+        if (typeof message.data === 'string') {
+            try {
+                const data = JSON.parse(message.data)
+                if (data.type === 'users') {
+                    updateUsersList(data.users)
+                }
+                return
+            } catch (e) {
+                // Не JSON, значит это аудио данные
+            }
+        }
+
         // console.log(message.data)
         const samples = new Float32Array(message.data)
         // console.log(samples)
@@ -35,46 +62,17 @@ async function getUserAudioAndStream(wsUrl: string) {
     processor.onaudioprocess = (event) => {
         const samples = event.inputBuffer.getChannelData(0)
         ws.send(samples.buffer)
-        // console.log(samples.buffer)
-        // const arrayBuffer = await message.data.arrayBuffer()
-        // audioContext.decodeAudioData(arrayBuffer, (decodedData) => {
-
-        // })
     }
 
     source.connect(processor)
     processor.connect(audioContext.destination)
+}
 
-    // const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    // const audioContext = new AudioContext()
-    // const source = audioContext.createMediaStreamSource(stream)
-    // const processor = audioContext.createScriptProcessor(4096, 1, 1)
-    // const ws = new WebSocket(wsUrl)
-
-    // ws.onopen = () => {
-    //     const stopTime = Date.now() + durationMs
-
-    //     processor.onaudioprocess = (event) => {
-    //         if (ws.readyState === WebSocket.OPEN) {
-    //             ws.send(event.inputBuffer.getChannelData(0))
-    //         }
-    //         if (Date.now() >= stopTime) {
-    //             source.disconnect(processor)
-    //             processor.disconnect(audioContext.destination)
-    //             stream.getTracks().forEach(track => track.stop())
-    //             ws.close()
-    //         }
-    //     }
-
-    //     source.connect(processor)
-    //     processor.connect(audioContext.destination)
-    // }
-
-    // ws.onmessage = async (message) => {
-    //     const audioBuffer = await audioContext.decodeAudioData(message.data)
-    //     const playbackSource = audioContext.createBufferSource()
-    //     playbackSource.buffer = audioBuffer
-    //     playbackSource.connect(audioContext.destination)
-    //     playbackSource.start()
-    // }
+function updateUsersList(users: string[]) {
+    activeUsersList.innerHTML = ''
+    users.forEach(user => {
+        const li = document.createElement('li')
+        li.textContent = user
+        activeUsersList.appendChild(li)
+    })
 }

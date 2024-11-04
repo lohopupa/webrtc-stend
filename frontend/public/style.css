@@ -1,0 +1,16 @@
+#users-list {
+    margin: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+#active-users {
+    list-style-type: none;
+    padding: 0;
+}
+
+#active-users li {
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}

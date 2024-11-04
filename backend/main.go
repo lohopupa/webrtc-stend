@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -13,8 +14,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	conn *websocket.Conn
-	send chan []byte
+	conn     *websocket.Conn
+	send     chan []byte
+	nickname string
 }
 
 var clients = make(map[*Client]bool)
@@ -41,7 +43,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	mutex.Unlock()
 
 	go handleClientMessages(client)
-
+	broadcastUsersList()
 	// Start sending messages to the client
 	for msg := range client.send {
 		err := conn.WriteMessage(websocket.BinaryMessage, msg)
@@ -59,6 +61,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	mutex.Unlock()
 	conn.Close()
+	broadcastUsersList()
 }
 
 func handleClientMessages(client *Client) {
@@ -74,31 +77,68 @@ func handleClientMessages(client *Client) {
 	}()
 
 	for {
-		_, message, err := client.conn.ReadMessage()
-		if err != nil {
-			log.Printf("Error reading message from client: %v", err)
-			break
-		}
-        mutex.Lock()
-		for client_ := range clients {
-			if client_ != client {
-                select {
-                case client_.send <- message:
-                default:
-                    log.Println("HUI")
-                    // close(client.send)
-                    // delete(clients, client)
-                }
+        _, message, err := client.conn.ReadMessage()
+        if err != nil {
+            break
+        }
+        
+        // Проверить тип сообщения
+        var jsonMsg map[string]interface{}
+        if err := json.Unmarshal(message, &jsonMsg); err == nil {
+            if jsonMsg["type"] == "nickname" {
+                client.nickname = jsonMsg["nickname"].(string)
+                continue
             }
-		}
-		mutex.Unlock()
-		// broadcast <- message
+        }
+        
+        // Отправка аудио с информацией о говорящем
+        audioMsg := map[string]interface{}{
+            "type": "audio",
+            "nickname": client.nickname,
+            "data": message,
+        }
+        
+        encodedMsg, _ := json.Marshal(audioMsg)
+        
+        mutex.Lock()
+        for client_ := range clients {
+            if client_ != client {
+                client_.send <- encodedMsg
+            }
+        }
+        mutex.Unlock()
 	}
 }
 
 // func handleMessages() {
 // 	for {
 // 		msg := <-broadcast
-		
+
 // 	}
 // }
+func broadcastUsersList() {
+    usersList := make([]string, 0)
+    mutex.Lock()
+    for client := range clients {
+        if client.nickname != "" {
+            usersList = append(usersList, client.nickname)
+        }
+    }
+    mutex.Unlock()
+
+    message := map[string]interface{}{
+        "type": "users",
+        "users": usersList,
+    }
+    jsonMessage, _ := json.Marshal(message)
+
+    mutex.Lock()
+    for client := range clients {
+        select {
+        case client.send <- jsonMessage:
+        default:
+            log.Println("Failed to send users list")
+        }
+    }
+    mutex.Unlock()
+}
