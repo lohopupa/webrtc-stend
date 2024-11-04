@@ -70,7 +70,7 @@ async function getUserAudioAndStream(wsUrl: string) {
 
     processor.onaudioprocess = (event) => {
         const samples = event.inputBuffer.getChannelData(0)
-        ws.send(samples.buffer)
+        ws.send(insertAtStart(samples.buffer, 2))
     }
 
     source.connect(processor)
@@ -84,4 +84,12 @@ function updateUsersList(users: string[]) {
         li.textContent = user
         activeUsersList.appendChild(li)
     })
+}
+
+function insertAtStart(samples: ArrayBuffer, newElement: number): Uint8Array {
+    const originalArray = new Uint8Array(samples)
+    const newArray = new Uint8Array(originalArray.length + 1)
+    newArray[0] = newElement
+    newArray.set(originalArray, 1)
+    return newArray
 }

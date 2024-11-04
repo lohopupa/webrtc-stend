@@ -41,7 +41,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		log.Println("Error upgrading connection:", err)
 		return
 	}
-	client := &Client{conn: conn, send: make(chan []byte)}
+	client := &Client{conn: conn, send: make(chan []byte), nickname: ""}
 
 	mutex.Lock()
 	clients[client] = true
@@ -106,8 +106,8 @@ func handleClientMessages(client *Client) {
 			mutex.Unlock()
 		case PKT_UPDATE_USERS:
 			log.Println("Users paket")
-		default:
-			log.Fatal("PIZDA")
+		// default:
+			// log.Fatal("PIZDA")
 		}
 	}
 }
@@ -135,14 +135,14 @@ func broadcastUsersList() {
 
 	msg := make([]byte, len(jsonMessage) + 1)
 	copy(msg[1:], jsonMessage)
-	msg[0] = PKT_UPDATE_USERS
+	msg[0] = byte(PKT_UPDATE_USERS)
 
     mutex.Lock()
     for client := range clients {
         select {
         case client.send <- msg:
         default:
-            log.Println("Failed to send users list")
+            log.Printf("Failed to send users list to %s \n", client.nickname)
         }
     }
     mutex.Unlock()
