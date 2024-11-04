@@ -13,6 +13,12 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+const (
+	PKT_HELLO = iota
+	PKT_UPDATE_USERS = iota
+	PKT_SOUND = iota
+)
+
 type Client struct {
 	conn     *websocket.Conn
 	send     chan []byte
@@ -20,7 +26,6 @@ type Client struct {
 }
 
 var clients = make(map[*Client]bool)
-var broadcast = make(chan []byte)
 var mutex = &sync.Mutex{}
 
 func main() {
@@ -81,32 +86,29 @@ func handleClientMessages(client *Client) {
         if err != nil {
             break
         }
-        
-        // Проверить тип сообщения
-        var jsonMsg map[string]interface{}
-        if err := json.Unmarshal(message, &jsonMsg); err == nil {
-            if jsonMsg["type"] == "nickname" {
-                client.nickname = jsonMsg["nickname"].(string)
-                continue
-            }
-        }
-        
-        // Отправка аудио с информацией о говорящем
-        audioMsg := map[string]interface{}{
-            "type": "audio",
-            "nickname": client.nickname,
-            "data": message,
-        }
-        
-        encodedMsg, _ := json.Marshal(audioMsg)
-        
-        mutex.Lock()
-        for client_ := range clients {
-            if client_ != client {
-                client_.send <- encodedMsg
-            }
-        }
-        mutex.Unlock()
+
+		switch msgType := message[0]; msgType {
+		case PKT_HELLO:
+			var jsonMsg map[string]interface{}
+			if err := json.Unmarshal(message[1:], &jsonMsg); err == nil {
+				client.nickname = jsonMsg["nickname"].(string)
+				broadcastUsersList()
+				continue
+			}
+		case PKT_SOUND:
+			
+			mutex.Lock()
+			for client_ := range clients {
+				if client_ != client {
+					client_.send <- message
+				}
+			}
+			mutex.Unlock()
+		case PKT_UPDATE_USERS:
+			log.Println("Users paket")
+		default:
+			log.Fatal("PIZDA")
+		}
 	}
 }
 
@@ -127,15 +129,18 @@ func broadcastUsersList() {
     mutex.Unlock()
 
     message := map[string]interface{}{
-        "type": "users",
         "users": usersList,
     }
     jsonMessage, _ := json.Marshal(message)
 
+	msg := make([]byte, len(jsonMessage) + 1)
+	copy(msg[1:], jsonMessage)
+	msg[0] = PKT_UPDATE_USERS
+
     mutex.Lock()
     for client := range clients {
         select {
-        case client.send <- jsonMessage:
+        case client.send <- msg:
         default:
             log.Println("Failed to send users list")
         }

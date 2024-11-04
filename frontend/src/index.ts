@@ -12,8 +12,14 @@ startCallButton.onclick = async () => {
     getUserAudioAndStream('wss://stend.lhpa.ru/ws')
 }
 
+function stringToByteArray(str: string): Uint8Array {
+    const encoder = new TextEncoder()
+    return encoder.encode(str)
+}
+
+
 async function getUserAudioAndStream(wsUrl: string) {
-    if(nicknameInput.value == ""){
+    if (nicknameInput.value == "") {
         alert("TELL ME YOUR NAME!!!")
         return
     }
@@ -22,37 +28,40 @@ async function getUserAudioAndStream(wsUrl: string) {
     ws.binaryType = 'arraybuffer'
     const audioContext = new AudioContext()
 
+    const msg = JSON.stringify({
+        nickname: nicknameInput.value
+    })
+    // const byteMsg = [0, ...stringToByteArray(msg)]
+
     ws.onopen = () => {
-        ws.send(JSON.stringify({
-            type: 'nickname',
-            nickname: nicknameInput.value
-        }))
+        ws.send(0 + msg)
     }
 
     ws.onmessage = async (message: MessageEvent) => {
 
-        if (typeof message.data === 'string') {
-            try {
-                const data = JSON.parse(message.data)
-                if (data.type === 'users') {
-                    updateUsersList(data.users)
-                }
-                return
-            } catch (e) {
-                // Не JSON, значит это аудио данные
+        switch (message.data[0]) {
+            case 0: {
+                console.log("HELLO")
+            }
+                break
+            case 1: {
+                console.log(message.data)
+            }
+                break
+            case 2: {
+                const samples = new Float32Array(message.data)
+                // console.log(samples)
+                const playbackNode = audioContext.createBufferSource()
+                const audioBuffer = audioContext.createBuffer(1, samples.length, audioContext.sampleRate)
+                audioBuffer.copyToChannel(samples, 0)
+                playbackNode.buffer = audioBuffer
+                playbackNode.connect(audioContext.destination)
+                playbackNode.start()
+                break
             }
         }
 
-        // console.log(message.data)
-        const samples = new Float32Array(message.data)
-        // console.log(samples)
-        const playbackNode = audioContext.createBufferSource()
-        const audioBuffer = audioContext.createBuffer(1, samples.length, audioContext.sampleRate)
-        audioBuffer.copyToChannel(samples, 0)
-        playbackNode.buffer = audioBuffer
-        // console.log(decodedData)
-        playbackNode.connect(audioContext.destination)
-        playbackNode.start()
+
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
